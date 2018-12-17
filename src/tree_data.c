@@ -5430,7 +5430,10 @@ lyd_dup_common(struct lyd_node *parent, struct lyd_node *new, const struct lyd_n
     new->next = NULL;
     new->prev = new;
     new->parent = NULL;
-    new->validity = ly_new_node_validity(new->schema);
+    if (options & LYD_DUP_OPT_NO_INVALIDATE)
+	    new->validity = orig->validity;
+    else
+	    new->validity = ly_new_node_validity(new->schema);
     new->dflt = orig->dflt;
     new->when_status = orig->when_status & LYD_WHEN;
 #ifdef LY_ENABLED_CACHE
@@ -5446,7 +5449,7 @@ lyd_dup_common(struct lyd_node *parent, struct lyd_node *new, const struct lyd_n
     }
 #endif
 
-    if (parent && lyd_insert(parent, new)) {
+    if (parent && lyd_insert_common(parent, NULL, new, !(options & LYD_DUP_OPT_NO_INVALIDATE))) {
         return EXIT_FAILURE;
     }
 
@@ -5682,7 +5685,7 @@ lyd_dup_to_ctx(const struct lyd_node *node, int options, struct ly_ctx *ctx)
                     key_dup = lyd_dup(key, options & LYD_DUP_OPT_NO_ATTR);
                     LY_CHECK_ERR_GOTO(!key_dup, LOGMEM(log_ctx), error);
 
-                    if (lyd_insert(new_node, key_dup)) {
+                    if (lyd_insert_common(new_node, NULL, key_dup, !(options & LYD_DUP_OPT_NO_INVALIDATE))) {
                         lyd_free(key_dup);
                         goto error;
                     }
@@ -5694,7 +5697,7 @@ lyd_dup_to_ctx(const struct lyd_node *node, int options, struct ly_ctx *ctx)
             }
 
             /* link together */
-            if (lyd_insert(new_node, parent)) {
+            if (lyd_insert_common(new_node, NULL, parent, !(options & LYD_DUP_OPT_NO_INVALIDATE))) {
                 ret = parent;
                 goto error;
             }
@@ -5717,6 +5720,15 @@ error:
 API struct lyd_node *
 lyd_dup(const struct lyd_node *node, int options)
 {
+    if (!node) {
+        LOGARG;
+        return NULL;
+    }
+
+    if (node->parent == NULL) {
+        options |= LYD_DUP_OPT_NO_INVALIDATE;
+    }
+
     return lyd_dup_to_ctx(node, options, NULL);
 }
 
@@ -5744,7 +5756,7 @@ lyd_dup_withsiblings(const struct lyd_node *node, int options)
             return NULL;
         }
 
-        if (lyd_insert_after(ret_iter, tmp)) {
+        if (lyd_insert_nextto(ret_iter, tmp, 0, !(options & LYD_DUP_OPT_NO_INVALIDATE))) {
             lyd_free_withsiblings(ret);
             return NULL;
         }
@@ -5761,7 +5773,7 @@ lyd_dup_withsiblings(const struct lyd_node *node, int options)
             return NULL;
         }
 
-        if (lyd_insert_before(ret_iter, tmp)) {
+        if (lyd_insert_nextto(ret_iter, tmp, 1, !(options & LYD_DUP_OPT_NO_INVALIDATE))) {
             lyd_free_withsiblings(ret);
             return NULL;
         }
